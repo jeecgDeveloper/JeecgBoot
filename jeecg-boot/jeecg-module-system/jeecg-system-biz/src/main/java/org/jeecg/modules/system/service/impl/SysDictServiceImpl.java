@@ -314,7 +314,7 @@ public class SysDictServiceImpl extends ServiceImpl<SysDictMapper, SysDict> impl
 		log.debug("无缓存dictTableList的时候调用这里！");
 
 		// 1.SQL注入校验（只限制非法串改数据库）
-		SqlInjectionUtil.specialFilterContentForDictSql(table);
+		SqlInjectionUtil.filterDictSqlKeywordBlacklist(table);
 		SqlInjectionUtil.filterContentMulti(text, code);
 		SqlInjectionUtil.specialFilterContentForDictSql(filterSql);
 		
@@ -582,6 +582,11 @@ public class SysDictServiceImpl extends ServiceImpl<SysDictMapper, SysDict> impl
 	 * @return
 	 */
 	private String getFilterSql(String tableSql, String text, String code, String condition, String keyword){
+		//update-begin---author:jeecg ---date:2026-08-24  for：【issue/9840】用户传入的 condition 走白名单-----------
+		if (oConvertUtils.isNotEmpty(condition)) {
+			SqlInjectionUtil.specialFilterContentForDictSql(condition);
+		}
+		//update-end-----author:jeecg ---date:2026-08-24  for：【issue/9840】用户传入的 condition 走白名单-----------
 		String filterSql = "";
 		String keywordSql = null;
 		String sqlWhere = "where ";
@@ -642,8 +647,8 @@ public class SysDictServiceImpl extends ServiceImpl<SysDictMapper, SysDict> impl
 		// 1.1 返回条件SQL（去掉开头的 where ）
 		final String wherePrefix = "(?i)where "; // (?i) 表示不区分大小写
 		String filterSqlString = filterSql.trim().replaceAll(wherePrefix, "");
-		// 1.2 条件SQL进行漏洞 check
-		SqlInjectionUtil.specialFilterContentForDictSql(filterSqlString);
+		// 1.2 条件SQL进行漏洞 check（内部拼接含 LIKE/ORDER BY，仅黑名单；用户 condition 已在方法入口白名单校验）
+		SqlInjectionUtil.filterDictSqlKeywordBlacklist(filterSqlString);
 		// 1.3 判断如何返回条件是 order by开头则前面拼上 1=1
 		if (oConvertUtils.isNotEmpty(filterSqlString) && filterSqlString.trim().toUpperCase().startsWith("ORDER")) {
 			filterSqlString = " 1=1 " + filterSqlString;
@@ -821,8 +826,8 @@ public class SysDictServiceImpl extends ServiceImpl<SysDictMapper, SysDict> impl
 			return null;
 		}
 		
-		// 2.字典SQL注入风险check
-		SqlInjectionUtil.specialFilterContentForDictSql(dictCode);
+		// 2.字典SQL注入风险check（dictCode 为 table,text,code[,condition]，非单一 filterSql）
+		SqlInjectionUtil.filterDictSqlKeywordBlacklist(dictCode);
 
 		if (dictCode.contains(SymbolConstant.COMMA)) {
 			// 代码逻辑说明: 下拉搜索不支持表名后加查询条件
@@ -885,7 +890,7 @@ public class SysDictServiceImpl extends ServiceImpl<SysDictMapper, SysDict> impl
 		sysBaseAPI.dictTableWhiteListCheckByDict(tableName, allFieldList.toArray(new String[0]));
 
 		// 1.2 SQL 注入基础检查
-		SqlInjectionUtil.specialFilterContentForDictSql(tableName);
+		SqlInjectionUtil.filterDictSqlKeywordBlacklist(tableName);
 
 		// ---------- 2. 转义表名与字段 ----------
 		String safeTable = SqlInjectionUtil.getSqlInjectTableName(tableName.trim());
@@ -933,7 +938,8 @@ public class SysDictServiceImpl extends ServiceImpl<SysDictMapper, SysDict> impl
 
 		String filterSql = conditionParts.isEmpty() ? "" : String.join(" and ", conditionParts);
 		if (oConvertUtils.isNotEmpty(filterSql)) {
-			SqlInjectionUtil.specialFilterContentForDictSql(filterSql);
+			// 服务端内部拼接的 IN / LIKE 片段，走黑名单
+			SqlInjectionUtil.filterDictSqlKeywordBlacklist(filterSql);
 		}
 
 		// ---------- 4. 分页查询 ----------

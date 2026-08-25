@@ -57,6 +57,51 @@ public class ShiroConfig {
     private DataRedisProperties redisProperties;
     //update-end---author:scott ---date:2026-07-07  for：【Spring Boot 4.0 升级】RedisProperties 改名为 DataRedisProperties，包路径变更-----------
     
+
+    /**
+     * 【issue/9840】字典/表字典接口必须强制 JWT，且必须登记在静态资源后缀 anon 规则之前，
+     * 避免请求路径形如静态资源时命中匿名放行。
+     */
+    static final String[] DICT_API_JWT_PATHS = new String[] {
+            "/sys/dict/getDictItems/**",
+            "/sys/dict/loadDict/**",
+            "/sys/dict/loadDictItem/**",
+            "/sys/dict/loadDictOrderByValue/**",
+            "/sys/dict/loadTreeData",
+            "/sys/dict/queryTableData",
+            "/sys/api/queryFilterTableDictInfo",
+            "/sys/api/queryTableDictItemsByCode",
+            "/sys/api/loadDictItemByKeyword"
+    };
+
+    /**
+     * 先登记字典 JWT，再登记静态资源 anon。LinkedHashMap 插入顺序即 Shiro 匹配顺序。
+     * 包可见，供单测校验顺序，无需启动 Spring/Redis。
+     */
+    static void putDictJwtThenStaticResourceAnon(Map<String, String> filterChainDefinitionMap) {
+        for (String path : DICT_API_JWT_PATHS) {
+            filterChainDefinitionMap.put(path, "jwt");
+        }
+        // 配置不会被拦截的链接 顺序判断
+        filterChainDefinitionMap.put("/", "anon");
+        filterChainDefinitionMap.put("/doc.html", "anon");
+        filterChainDefinitionMap.put("/**/*.js", "anon");
+        filterChainDefinitionMap.put("/**/*.css", "anon");
+        filterChainDefinitionMap.put("/**/*.html", "anon");
+        filterChainDefinitionMap.put("/**/*.svg", "anon");
+        filterChainDefinitionMap.put("/**/*.pdf", "anon");
+        filterChainDefinitionMap.put("/**/*.jpg", "anon");
+        filterChainDefinitionMap.put("/**/*.png", "anon");
+        filterChainDefinitionMap.put("/**/*.gif", "anon");
+        filterChainDefinitionMap.put("/**/*.ico", "anon");
+        filterChainDefinitionMap.put("/**/*.ttf", "anon");
+        filterChainDefinitionMap.put("/**/*.woff", "anon");
+        filterChainDefinitionMap.put("/**/*.woff2", "anon");
+
+        filterChainDefinitionMap.put("/**/*.glb", "anon");
+        filterChainDefinitionMap.put("/**/*.wasm", "anon");
+    }
+
     /**
      * Filter Chain定义说明
      *
@@ -111,24 +156,8 @@ public class ShiroConfig {
         filterChainDefinitionMap.put("/sys/checkAuth", "anon"); //授权接口排除
         filterChainDefinitionMap.put("/openapi/call/**", "anon"); // 开放平台接口排除
 
-        // 代码逻辑说明: 排除静态资源后缀
-        filterChainDefinitionMap.put("/", "anon");
-        filterChainDefinitionMap.put("/doc.html", "anon");
-        filterChainDefinitionMap.put("/**/*.js", "anon");
-        filterChainDefinitionMap.put("/**/*.css", "anon");
-        filterChainDefinitionMap.put("/**/*.html", "anon");
-        filterChainDefinitionMap.put("/**/*.svg", "anon");
-        filterChainDefinitionMap.put("/**/*.pdf", "anon");
-        filterChainDefinitionMap.put("/**/*.jpg", "anon");
-        filterChainDefinitionMap.put("/**/*.png", "anon");
-        filterChainDefinitionMap.put("/**/*.gif", "anon");
-        filterChainDefinitionMap.put("/**/*.ico", "anon");
-        filterChainDefinitionMap.put("/**/*.ttf", "anon");
-        filterChainDefinitionMap.put("/**/*.woff", "anon");
-        filterChainDefinitionMap.put("/**/*.woff2", "anon");
-
-        filterChainDefinitionMap.put("/**/*.glb", "anon");
-        filterChainDefinitionMap.put("/**/*.wasm", "anon");
+        // 代码逻辑说明: 【issue/9840】字典 JWT 必须在静态资源匿名规则之前
+        putDictJwtThenStaticResourceAnon(filterChainDefinitionMap);
 
         filterChainDefinitionMap.put("/druid/**", "anon");
         filterChainDefinitionMap.put("/swagger-ui.html", "anon");

@@ -193,9 +193,10 @@ public class Issue9677_SqlInjectionNewlineBypassTest {
         }
 
         @Test
-        @DisplayName("字典条件中含like的合法查询通过")
-        void likePasses() {
-            assertDoesNotThrow(() -> SqlInjectionUtil.specialFilterContentForDictSql("name like '%张%'"));
+        @DisplayName("字典条件中的 like 由 issue/9840 白名单拒绝")
+        void likeRejectedByDictFilterWhitelist() {
+            assertThrows(JeecgSqlInjectionException.class,
+                    () -> SqlInjectionUtil.specialFilterContentForDictSql("name like '%张%'"));
         }
 
         @Test

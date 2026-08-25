@@ -91,6 +91,23 @@ public class SqlInjectionUtil {
 	 */
 	private final static Pattern SQL_ANNOTATION = Pattern.compile("/\\*[\\s\\S]*\\*/");
 	private final static  String SQL_ANNOTATION2 = "--";
+
+	/**
+	 * 【issue/9840】dict filterSql 白名单：仅允许简单比较 / IN 列表，以及 AND/OR 连接。
+	 * Unicode-unaware；AND/OR/IN 大小写不敏感。
+	 */
+	private static final String DICT_FILTER_IDENT = "[A-Za-z_][A-Za-z0-9_.]*";
+	private static final String DICT_FILTER_NUMBER = "[0-9]+(?:\\.[0-9]+)?";
+	private static final String DICT_FILTER_STRING = "'[^']*'";
+	private static final String DICT_FILTER_LITERAL = "(?:" + DICT_FILTER_NUMBER + "|" + DICT_FILTER_STRING + ")";
+	private static final String DICT_FILTER_OP = "(?:!=|<>|>=|<=|=|>|<)";
+	private static final String DICT_FILTER_COMPARISON = DICT_FILTER_IDENT + "\\s*" + DICT_FILTER_OP + "\\s*" + DICT_FILTER_LITERAL;
+	private static final String DICT_FILTER_IN = DICT_FILTER_IDENT + "\\s+IN\\s*\\(\\s*" + DICT_FILTER_LITERAL
+			+ "(?:\\s*,\\s*" + DICT_FILTER_LITERAL + ")*\\s*\\)";
+	private static final String DICT_FILTER_PREDICATE = "(?:" + DICT_FILTER_COMPARISON + "|" + DICT_FILTER_IN + ")";
+	private static final Pattern DICT_FILTER_SQL_WHITELIST = Pattern.compile(
+			"^\\s*" + DICT_FILTER_PREDICATE + "(?:\\s+(?:AND|OR)\\s+" + DICT_FILTER_PREDICATE + ")*\\s*$",
+			Pattern.CASE_INSENSITIVE);
 	
 	/**
 	 * sql注入提示语
@@ -272,10 +289,42 @@ public class SqlInjectionUtil {
 	 * @return
 	 */
 	public static void specialFilterContentForDictSql(String value) {
-		String[] xssArr = specialDictSqlXssStr.split("\\|");
 		if (value == null || "".equals(value)) {
 			return;
 		}
+		//update-begin---author:jeecg ---date:2026-08-24  for：【issue/9840】dict filterSql 白名单，黑名单作为纵深防御-----------
+		assertDictFilterSqlWhitelist(value);
+		applySpecialDictSqlBlacklist(value);
+		//update-end-----author:jeecg ---date:2026-08-24  for：【issue/9840】dict filterSql 白名单，黑名单作为纵深防御-----------
+	}
+
+	/**
+	 * 仅关键词黑名单（无白名单）。用于表名、dictCode、以及服务端内部拼接的 LIKE/ORDER BY 片段。
+	 * 用户传入的 filterSql / condition 请走 {@link #specialFilterContentForDictSql(String)}。
+	 */
+	public static void filterDictSqlKeywordBlacklist(String value) {
+		if (value == null || "".equals(value)) {
+			return;
+		}
+		applySpecialDictSqlBlacklist(value);
+	}
+
+	/**
+	 * 【issue/9840】仅允许简单比较表达式与 IN 列表。空串视为无过滤条件（与历史行为一致）。
+	 */
+	private static void assertDictFilterSqlWhitelist(String value) {
+		String trimmed = value.trim();
+		if (trimmed.isEmpty()) {
+			return;
+		}
+		if (!DICT_FILTER_SQL_WHITELIST.matcher(trimmed).matches()) {
+			log.error(SqlInjectionUtil.SQL_INJECTION_TIP_VARIABLE, value);
+			throw new JeecgSqlInjectionException(SqlInjectionUtil.SQL_INJECTION_TIP + value);
+		}
+	}
+
+	private static void applySpecialDictSqlBlacklist(String value) {
+		String[] xssArr = specialDictSqlXssStr.split("\\|");
 		// 一、校验sql注释 不允许有sql注释
 		checkSqlAnnotation(value);
 		value = value.toLowerCase().trim();
